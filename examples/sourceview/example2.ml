@@ -8,6 +8,14 @@
 (**************************************************************************)
 (* Run with ../../src/lablgtk2 -localdir example2.ml  *)
 
+(* Alternatively, run with
+  opam install ocamlfind lablgtk conf-gtksourceview
+  ocamlfind ocamlopt -unsafe-string -package lablgtk2.sourceview2 -linkpkg -o example2 example2.ml
+  ./example2
+
+  TODO: replace String with Bytes.
+*)
+
 open Printf
 
 let lang_mime_type = "text/x-ocaml"
@@ -21,12 +29,12 @@ let print_lang_ids language_manager =
   let i = ref 0 in
   prerr_endline "language_ids:";
   List.iter
-    (fun id -> incr i; 
+    (fun id -> incr i;
       match language_manager#language id with
 	Some lang ->
           let name = lang#name in
           let section = lang#section in
-          prerr_endline 
+          prerr_endline
    	    (sprintf "%d: %s %s (%s)" !i id name section)
         | None -> ())
     language_manager#language_ids
@@ -34,7 +42,7 @@ let print_lang_ids language_manager =
 let print_style_schemes mgr =
   let i = ref 0 in
   prerr_endline "style schemes:";
-  List.iter (fun id -> 
+  List.iter (fun id ->
       incr i;
       match mgr#style_scheme id with
           Some scm ->
@@ -42,6 +50,8 @@ let print_style_schemes mgr =
 	      (sprintf "%d: %s %s" !i id scm#description)
         | None -> ())
     mgr#style_scheme_ids
+
+let locale = GtkMain.Main.init ()
 
 let win = GWindow.window ~title:"LablGtkSourceView test" ()
 let scrolled_win = GBin.scrolled_window
@@ -74,7 +84,7 @@ let () =
   print_lang_ids language_manager;
   print_lang lang
 
-let style_scheme_manager = 
+let style_scheme_manager =
   GSourceView2.source_style_scheme_manager ~default:true
 
 let () =
@@ -84,7 +94,7 @@ let () =
   let text =
     let ic = open_in "example2.ml" in
     let size = in_channel_length ic in
-    let buf = String.create size in
+    let buf = Bytes.create size in
     really_input ic buf 0 size;
     close_in ic;
     buf
