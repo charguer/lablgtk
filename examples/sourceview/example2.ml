@@ -18,6 +18,9 @@
 
 open Printf
 
+let print_infos = false
+let print_spaces = false
+
 let lang_mime_type = "text/x-ocaml"
 let lang_name = "ocaml"
 let use_mime_type = true
@@ -80,15 +83,15 @@ let lang =
         Some x -> x
       | None -> failwith (sprintf "can't load %s" lang_name))
 
-let () =
-  print_lang_ids language_manager;
-  print_lang lang
-
-let style_scheme_manager =
-  GSourceView2.source_style_scheme_manager ~default:true
 
 let () =
-  print_style_schemes style_scheme_manager
+  if print_infos then begin
+    print_lang_ids language_manager;
+    print_lang lang;
+    let style_scheme_manager =
+      GSourceView2.source_style_scheme_manager ~default:true in
+    print_style_schemes style_scheme_manager
+  end
 
 let () =
   let text =
@@ -101,33 +104,65 @@ let () =
   in
   win#set_allow_shrink true;
   source_view#misc#modify_font_by_name font_name;
-  source_view#source_buffer#set_highlight_matching_brackets true;
-  source_view#source_buffer#set_language (Some lang);
-  source_view#source_buffer#set_highlight_syntax true;
+
+  let buffer = source_view#source_buffer in
+  buffer#set_highlight_matching_brackets true;
+  buffer#set_language (Some lang);
+  buffer#set_highlight_syntax true;
 
   source_view#set_smart_home_end `AFTER;
   if source_view#smart_home_end <> `AFTER then failwith "regret";
 
-  source_view#set_draw_spaces [`SPACE; `NEWLINE];
+  if print_spaces then begin
+    source_view#set_draw_spaces [`SPACE; `NEWLINE];
+    List.iter
+      (function
+        | `SPACE -> print_string " space"
+        | `TAB -> print_string " tab"
+        | `NEWLINE -> print_string " newline"
+        | `NBSP -> print_string " nbsp"
+        | `LEADING -> print_string "leading"
+        | `TEXT -> print_string "text"
+        | `TRAILING -> print_string "trailing")
+      source_view#draw_spaces;
+  end;
 
-  List.iter
-    (function
-      | `SPACE -> print_string " space"
-      | `TAB -> print_string " tab"
-      | `NEWLINE -> print_string " newline"
-      | `NBSP -> print_string " nbsp"
-      | `LEADING -> print_string "leading"
-      | `TEXT -> print_string "text"
-      | `TRAILING -> print_string "trailing")
-    source_view#draw_spaces;
   print_newline ();
+
+  ignore (buffer#connect#changed (fun _ ->
+    prerr_endline "changed";
+    Printf.eprintf "%d\n" buffer#cursor_position
+    let iter = buffer#get_iter_at_mark `INSERT in
+    (* class buffer_skel *)
+   ));
+
 
   ignore (win#connect#destroy (fun _ -> GMain.quit ()));
   ignore (source_view#connect#undo (fun _ -> prerr_endline "undo"));
 
-  source_view#source_buffer#begin_not_undoable_action ();
-  source_view#source_buffer#set_text text;
-  source_view#source_buffer#end_not_undoable_action ();
+  buffer#begin_not_undoable_action ();
+  buffer#set_text text;
+  buffer#end_not_undoable_action ();
 
   win#show ();
   GMain.Main.main ()
+
+
+(*
+let template_item (text, offset, len, key) =
+  let modifier = modifier_for_templates#get in
+  let idx = String.index text ' ' in
+  let name = String.sub text 0 idx in
+  let label = "_"^name^" __" in
+  let negoffset = String.length text - offset - len in
+  let callback sn =
+    let b = sn.buffer in
+    if b#insert_interactive text then begin
+      let iter = b#get_iter_at_mark `INSERT in
+      ignore (iter#nocopy#backward_chars negoffset);
+      b#move_mark `INSERT ~where:iter;
+      ignore (iter#nocopy#backward_chars len);
+      b#move_mark `SEL_BOUND ~where:iter;
+    end
+
+*)
