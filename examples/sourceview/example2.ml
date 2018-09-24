@@ -95,6 +95,63 @@ let () =
 
 exception Cancel
 
+(** Text description of the unicode bindings:
+
+    one item per line, each item consists of:
+    - a leading backslahs
+    - a ascii word next to it
+    - a unicode word (or possibly a full sentence in-between doube-quotes,
+     the sentence may include spaces and \n tokens),
+    - optinally, an integer indicating the "priority" (lower is higher priority),
+      technically the length of the prefix that suffices to obtain this word.
+      Ex. if "\lambda" has priority 3, then "\lam" always decodes as "\lambda".
+
+      \pi π
+      \lambda λ 3
+      \lambdas λs 4
+      \lake Ο 2
+      \lemma "Lemma foo : x. Proof. Qed." 1
+
+    - In case of equality between two candidates (same ascii word, or same
+      priorities for two words with similar prefix), the first binding is considered.
+*)
+
+let unicode_bindings = [
+  ("\\pi", "π", None);
+  ("\\lambdas", "λs", Some 4);
+  ("\\lambda", "λ", Some 3);
+  ("\\lake", "0", Some 2);
+  ("\\lemma", "Lemma foo : x. Proof. Qed", Some 1);
+  ]
+
+(** Auxiliary function to test whether [s] is a prefix of [str] *)
+
+let string_is_prefix s str =
+   let n = String.length s in
+   let m = String.length str in
+   if m < n
+      then false
+      else (s = String.sub str 0 n)
+
+(* unicode_lookup : string -> string option *)
+
+let unicode_lookup prefix =
+  let max_priority = 100000000 in
+  let cur_word = ref None in
+  let cur_prio = ref (max_priority+1) in
+  let test_binding (key, word, prio_opt) =
+    let prio =
+      match prio_opt with
+      | None -> max_priority
+      | Some p -> p
+      in
+    if string_is_prefix prefix key && prio < !cur_prio then begin
+      cur_word := Some word;
+      cur_prio := prio;
+    end in
+  List.iter test_binding unicode_bindings;
+  !cur_word
+
 let () =
   let text =
     let ic = open_in "example2.ml" in
@@ -135,12 +192,18 @@ let () =
     prerr_endline "changed";
     try
 
+      let m_insert = buffer#get_mark `INSERT in
+      let i_insert = buffer#get_iter_at_mark (`MARK m_insert) in
+      (* alternative:
       let i_insert = buffer#get_iter_at_mark `INSERT in
+      let m_insert = buffer#create_mark ~left_gravity:false i_insert in*)
+
       let i_line_start = i_insert#backward_line in
 
+      (*debug:
       let s = i_line_start#get_slice i_insert in
       Printf.eprintf "Line=%s" s;
-      prerr_endline "";
+      prerr_endline "";*)
 
       let r_backslash = i_insert#backward_search ~limit:i_line_start "\\" in
       let i_backslash_start =
@@ -149,23 +212,29 @@ let () =
         | Some (i_backslash_start,i_backslash_stop) -> i_backslash_start
         in
 
-      let key = i_backslash_start#get_text i_insert in
-      Printf.eprintf "Key=%s" key;
-      prerr_endline "";
+      let code = i_backslash_start#get_text i_insert in
+      (*debug:
+      Printf.eprintf "Code=%s" code;
+      prerr_endline "";*)
 
-      let n = String.length key in
+      let n = String.length code in
       if n = 0 then raise Cancel;
-      if key.[n-1] <> '!' then raise Cancel;
-      ignore (buffer#delete_interactive ~start:i_backslash_start ~stop:i_insert ());
-      let i_insert_new = buffer#get_iter_at_mark `INSERT in
-      ignore (buffer#insert_interactive ~iter:i_insert_new "DONE");
+      if code.[n-1] <> '!' then raise Cancel;
+      let prefix = String.sub code 0 (n-1) in
+      let word =
+        match unicode_lookup prefix with
+        | None -> prerr_endline "Warning: no binding found."; raise Cancel
+        | Some w -> w
+        in
+
+      ignore (buffer#delete ~start:i_backslash_start ~stop:i_insert);
+      let i_insert_new = buffer#get_iter_at_mark (`MARK m_insert) in
+      ignore (buffer#insert_interactive ~iter:i_insert_new word);
+
+      (* http://lablgtk.forge.ocamlcore.org/refdoc/GText.buffer_skel-c.html *)
 
     with Cancel -> ()
-    (*
-    let iter = buffer#get_iter_at_mark `INSERT in*)
-    (* class buffer_skel *)
    ));
-
 
   ignore (win#connect#destroy (fun _ -> GMain.quit ()));
   ignore (source_view#connect#undo (fun _ -> prerr_endline "undo"));

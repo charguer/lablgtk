@@ -1,7 +1,7 @@
 all: example2
 
 example2: example2.ml
-	ocamlfind ocamlopt -unsafe-string -package lablgtk2.sourceview2 -linkpkg -o $@ $<
+	ocamlfind ocamlopt -g -unsafe-string -package lablgtk2.sourceview2 -linkpkg -o $@ $<
 
 run: all
 	./example2
