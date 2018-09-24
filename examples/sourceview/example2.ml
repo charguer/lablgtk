@@ -93,6 +93,8 @@ let () =
     print_style_schemes style_scheme_manager
   end
 
+exception Cancel
+
 let () =
   let text =
     let ic = open_in "example2.ml" in
@@ -131,8 +133,36 @@ let () =
 
   ignore (buffer#connect#changed (fun _ ->
     prerr_endline "changed";
-    Printf.eprintf "%d\n" buffer#cursor_position
-    let iter = buffer#get_iter_at_mark `INSERT in
+    try
+
+      let i_insert = buffer#get_iter_at_mark `INSERT in
+      let i_line_start = i_insert#backward_line in
+
+      let s = i_line_start#get_slice i_insert in
+      Printf.eprintf "Line=%s" s;
+      prerr_endline "";
+
+      let r_backslash = i_insert#backward_search ~limit:i_line_start "\\" in
+      let i_backslash_start =
+        match r_backslash  with
+        | None -> raise Cancel
+        | Some (i_backslash_start,i_backslash_stop) -> i_backslash_start
+        in
+
+      let key = i_backslash_start#get_text i_insert in
+      Printf.eprintf "Key=%s" key;
+      prerr_endline "";
+
+      let n = String.length key in
+      if n = 0 then raise Cancel;
+      if key.[n-1] <> '!' then raise Cancel;
+      ignore (buffer#delete_interactive ~start:i_backslash_start ~stop:i_insert ());
+      let i_insert_new = buffer#get_iter_at_mark `INSERT in
+      ignore (buffer#insert_interactive ~iter:i_insert_new "DONE");
+
+    with Cancel -> ()
+    (*
+    let iter = buffer#get_iter_at_mark `INSERT in*)
     (* class buffer_skel *)
    ));
 
